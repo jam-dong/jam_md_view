@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WixLocalization Culture="en-us" Codepage="65001" xmlns="http://schemas.microsoft.com/wix/2006/localization">
+  <String Id="TauriLanguage">1033</String>
+  <String Id="TauriCodepage">1252</String>
+  <String Id="LaunchApp">Launch 折简</String>
+  <String Id="DowngradeErrorMessage">A newer version of 折简 is already installed.</String>
+  <String Id="PathEnvVarFeature">Add the install location of the 折简 executable to the PATH system environment variable. This allows the 折简 executable to be called from any location.</String>
+  <String Id="InstallAppFeature">Installs 折简.</String>
+</WixLocalization>

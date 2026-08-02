@@ -1,0 +1,20 @@
+# Build artifacts
+/src-tauri/target
+/src-tauri/gen/schemas
+/node_modules
+**/*.rs.bk
+
+# Local build / logs
+/build.log
+
+# Release binaries (published via Gitee Releases, not committed to source)
+/release
+
+# Temp WiX toolset download
+/wix_full.zip
+
+# Temp dev / test scripts
+/_*.js
+
+# WorkBuddy agent state
+/.workbuddy

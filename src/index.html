@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>折简</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="vendor/hljs-themes.css" />
+    <link rel="stylesheet" href="vendor/katex/katex.min.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand" data-tauri-drag-region>
+        <img class="brand-logo" src="logo.png" alt="折简" />
+        <span class="brand-mark">折简</span>
+      </div>
+      <div class="doc-meta" data-tauri-drag-region>
+        <span id="doc-name" class="doc-name" title="">未命名.md</span>
+        <span id="save-state" class="save-state" aria-live="polite"></span>
+      </div>
+      <div class="win-controls">
+        <button id="win-min" class="win-btn" type="button" aria-label="最小化" title="最小化">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+        </button>
+        <button id="win-max" class="win-btn" type="button" aria-label="最大化 / 还原" title="最大化 / 还原">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5" /></svg>
+        </button>
+        <button id="win-close" class="win-btn win-btn--close" type="button" aria-label="关闭" title="关闭">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside id="outline-panel" class="outline-panel" aria-label="文档大纲">
+        <div class="panel-header">
+          <span class="panel-title">大纲</span>
+          <button id="outline-close" class="icon-btn" type="button" aria-label="关闭大纲">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+        <nav id="outline-list" class="outline-list"></nav>
+      </aside>
+
+      <section id="content" class="content">
+        <div id="preview" class="preview" tabindex="0"></div>
+        <textarea id="source" class="source" spellcheck="false" placeholder="在此输入 Markdown…"></textarea>
+      </section>
+
+      <!-- Empty state (no document loaded) -->
+      <div id="empty-state" class="empty-state">
+        <div class="empty-inner">
+          <img class="empty-logo" src="logo.png" alt="折简" />
+          <div class="empty-mark">折简</div>
+          <p class="empty-text">一张空白的纸，正等待第一句话。<br />打开一份文档，或就此落笔。</p>
+          <div class="empty-actions">
+            <button id="empty-open" class="empty-btn empty-btn--solid" type="button">打开</button>
+            <button id="empty-new" class="empty-btn" type="button">新建</button>
+          </div>
+          <p class="empty-hint">也可直接双击 .md 文件，用本应用打开</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Settings drawer -->
+    <div id="settings-modal" class="drawer" aria-hidden="true">
+      <div class="drawer-backdrop" data-close="settings"></div>
+      <div class="drawer-card" role="dialog" aria-modal="true" aria-label="偏好设置">
+        <div class="drawer-header">
+          <h2>偏好设置</h2>
+          <button class="icon-btn" type="button" data-close="settings" aria-label="关闭">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="drawer-body">
+          <div class="field">
+            <span class="field-label">正文字体</span>
+            <div class="seg" role="radiogroup" aria-label="正文字体">
+              <button class="seg-item" data-font="system" type="button">系统</button>
+              <button class="seg-item" data-font="serif" type="button">衬线</button>
+              <button class="seg-item" data-font="mono" type="button">等宽</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="field-label">字号 <em id="font-size-val">14</em> px</span>
+            <input id="set-font-size" type="range" min="13" max="30" step="1" value="14" />
+          </div>
+
+          <div class="field">
+            <span class="field-label">行高 <em id="line-height-val">1.70</em></span>
+            <input id="set-line-height" type="range" min="1.3" max="2.4" step="0.05" value="1.7" />
+          </div>
+
+          <div class="field">
+            <span class="field-label">外观</span>
+            <div class="seg" role="radiogroup" aria-label="外观主题">
+              <button class="seg-item" data-theme="light" type="button">浅色</button>
+              <button class="seg-item" data-theme="dark" type="button">深色</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating tool rail -->
+    <div class="fab-rail">
+      <div class="fab-item">
+        <span class="fab-label">源码</span>
+        <button id="fab-source" class="fab" type="button" aria-label="切换源码模式" title="切换源码模式">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 8l-4 4 4 4M15 8l4 4-4 4" />
+          </svg>
+        </button>
+      </div>
+      <div class="fab-item">
+        <span class="fab-label">大纲</span>
+        <button id="fab-outline" class="fab" type="button" aria-label="显示大纲" title="显示大纲">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M9 6h11M9 12h11M9 18h11" />
+            <circle cx="4" cy="6" r="1.3" />
+            <circle cx="4" cy="12" r="1.3" />
+            <circle cx="4" cy="18" r="1.3" />
+          </svg>
+        </button>
+      </div>
+      <div class="fab-item">
+        <span class="fab-label">设置</span>
+        <button id="fab-settings" class="fab" type="button" aria-label="打开设置" title="打开设置">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 8h16M4 16h16" />
+            <circle cx="9" cy="8" r="2.2" />
+            <circle cx="15" cy="16" r="2.2" />
+          </svg>
+        </button>
+      </div>
+      <div class="fab-sep" aria-hidden="true"></div>
+      <div class="fab-item">
+        <span class="fab-label">打开</span>
+        <button id="fab-open" class="fab" type="button" aria-label="打开文件" title="打开文件">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+            <path d="M3 9h18" />
+          </svg>
+        </button>
+      </div>
+      <div class="fab-item">
+        <span class="fab-label">保存</span>
+        <button id="fab-save" class="fab" type="button" aria-label="保存" title="保存">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M5 3h11l3 3v15H5z" />
+            <path d="M8 3v6h7" />
+            <path d="M8 21v-6h8v6" />
+          </svg>
+        </button>
+      </div>
+      <div class="fab-item">
+        <span class="fab-label">回到顶部</span>
+        <button id="fab-top" class="fab" type="button" aria-label="回到顶部" title="回到顶部">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 19V5M5 12l7-7 7 7" />
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Toast (top-center) -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="vendor/marked.min.js"></script>
+    <script src="vendor/highlight.min.js"></script>
+    <script src="vendor/katex/katex.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
