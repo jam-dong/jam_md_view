@@ -47,6 +47,10 @@
   var docNameEl, saveStateEl;
   var fabSource, fabOutline, fabSettings, fabOpen, fabSave, fabTop, toastEl;
   var fontSegItems, themeSegItems, fontSizeInput, lineHeightInput, fontSizeVal, lineHeightVal;
+  var closeTrayEl, minTrayEl;
+  // Runtime copy of tray behaviour fetched from Rust (so the minimize button
+  // can decide between `minimize` and `hide` without re-querying Rust).
+  var tray = { closeToTray: false, minimizeToTray: false };
 
   function $(id) {
     return document.getElementById(id);
@@ -75,6 +79,8 @@
     lineHeightVal = $("line-height-val");
     fontSegItems = document.querySelectorAll("[data-font]");
     themeSegItems = document.querySelectorAll("[data-theme]");
+    closeTrayEl = $("set-close-tray");
+    minTrayEl = $("set-min-tray");
 
     setupMarked();
     loadSettings();
@@ -90,6 +96,18 @@
       .catch(function () {
         showEmptyState();
       });
+
+    // Load tray behaviour settings so the minimize button and the settings
+    // switches reflect the persisted (and runtime-switchable) state.
+    invoke("get_settings")
+      .then(function (s) {
+        if (!s) return;
+        tray.closeToTray = !!s.close_to_tray;
+        tray.minimizeToTray = !!s.minimize_to_tray;
+        if (closeTrayEl) closeTrayEl.checked = tray.closeToTray;
+        if (minTrayEl) minTrayEl.checked = tray.minimizeToTray;
+      })
+      .catch(function () {});
 
     listen("open-file", function (e) {
       if (e && e.payload) openFile(e.payload);
@@ -281,11 +299,19 @@
   }
 
   // ---- File operations ----
+  // Toggle the "has-doc" state on both <html> (so global elements like the
+  // top bar title and the floating rail can react) and .workspace (so the
+  // empty state can hide itself).
+  function setHasDoc(on) {
+    document.documentElement.classList.toggle("has-doc", on);
+    workspaceEl.classList.toggle("has-doc", on);
+  }
+
   function openFile(p) {
     current = { path: p.path || null, name: p.name || "未命名.md", content: p.content || "" };
     lastSaved = current.content;
     docLoaded = true;
-    workspaceEl.classList.add("has-doc");
+    setHasDoc(true);
     setDirty(false);
     setSourceMode(false);
     hideSettings();
@@ -295,7 +321,7 @@
 
   function showEmptyState() {
     docLoaded = false;
-    workspaceEl.classList.remove("has-doc");
+    setHasDoc(false);
     preview.innerHTML = "";
     outlineList.innerHTML = "";
   }
@@ -304,7 +330,7 @@
     current = { path: null, name: "未命名.md", content: "" };
     lastSaved = "";
     docLoaded = true;
-    workspaceEl.classList.add("has-doc");
+    setHasDoc(true);
     setDirty(false);
     setSourceMode(true);
     updateDocName();
@@ -443,10 +469,13 @@
   }
 
   // ---- Source / preview toggle ----
+  // In source mode the <textarea> owns its own scroll (fixed height via CSS),
+  // so the native textarea behavior keeps the caret visible while typing —
+  // we no longer auto-grow the textarea and no longer scroll the whole window.
   function sizeSource() {
     if (!isSource) return;
-    sourceEl.style.height = "auto";
-    sourceEl.style.height = sourceEl.scrollHeight + "px";
+    // Nothing to size: CSS gives the textarea a fixed height and its own
+    // scrollbar. Kept as a no-op hook for future tweaks.
   }
 
   function setSourceMode(on) {
@@ -556,7 +585,9 @@
     $("empty-new").addEventListener("click", newDoc);
 
     settingsModal.addEventListener("click", function (e) {
-      if (e.target && e.target.getAttribute("data-close") === "settings") hideSettings();
+      // Use closest() so clicks on child nodes (e.g. an icon inside the button)
+      // still resolve to the [data-close] trigger.
+      if (e.target && e.target.closest('[data-close="settings"]')) hideSettings();
     });
 
     sourceEl.addEventListener("input", function () {
@@ -591,6 +622,20 @@
       persistSettings();
       applySettings();
     });
+
+    // Tray behaviour switches — take effect immediately (no restart needed).
+    if (closeTrayEl) {
+      closeTrayEl.addEventListener("change", function () {
+        tray.closeToTray = closeTrayEl.checked;
+        invoke("set_close_to_tray", { value: tray.closeToTray }).catch(function () {});
+      });
+    }
+    if (minTrayEl) {
+      minTrayEl.addEventListener("change", function () {
+        tray.minimizeToTray = minTrayEl.checked;
+        invoke("set_minimize_to_tray", { value: tray.minimizeToTray }).catch(function () {});
+      });
+    }
   }
 
   function bindShortcuts() {
@@ -612,6 +657,26 @@
   // ---- Custom window controls (borderless window) ----
   function bindWindowControls() {
     if (!appWindow) return; // running outside Tauri (e.g. browser preview)
+
+    // Drag the window from any element marked as a drag region (top bar, etc).
+    // `data-tauri-drag-region` alone is unreliable across WebView versions, so
+    // we explicitly start the native drag on pointer-down.
+    var dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
+    Array.prototype.forEach.call(dragRegions, function (el) {
+      var onDown = function (e) {
+        // Let real interactive controls (buttons, links, inputs) work normally.
+        if (e.target.closest("button, a, input, textarea, select, [data-no-drag]")) return;
+        if (e.button != null && e.button !== 0) return; // only left button / touch
+        try {
+          appWindow.startDragging();
+        } catch (err) {
+          console.error(err);
+        }
+      };
+      el.addEventListener("mousedown", onDown);
+      el.addEventListener("touchstart", onDown, { passive: true });
+    });
+
     var wmin = $("win-min"),
       wmax = $("win-max"),
       wclose = $("win-close");
@@ -625,7 +690,12 @@
         }
       };
     }
-    if (wmin) wmin.addEventListener("click", guard(function () { appWindow.minimize(); }));
+    if (wmin) wmin.addEventListener("click", guard(function () {
+      // Respect the "minimize to tray" setting: hide the window so it lives in
+      // the system tray instead of sitting on the taskbar.
+      if (tray.minimizeToTray) appWindow.hide();
+      else appWindow.minimize();
+    }));
     if (wmax) wmax.addEventListener("click", guard(function () { appWindow.toggleMaximize(); }));
     if (wclose) wclose.addEventListener("click", guard(function () { appWindow.close(); }));
   }
